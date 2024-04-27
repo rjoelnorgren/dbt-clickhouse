@@ -17,7 +17,9 @@ class ClickHouseColumn(Column):
         'INTEGER': 'Int32',
     }
     is_nullable: bool = False
-    _brackets_regex = re.compile(r'^(Nullable|LowCardinality)\((.*)\)$')
+    is_low_cardinality: bool = False
+    # Support LowCardinality(Nullable(dtype))
+    _brackets_regex = re.compile(r'^(LowCardinality)?\(?(Nullable|LowCardinality)\((.*?)\)\)?$')
     _fix_size_regex = re.compile(r'FixedString\((.*?)\)')
     _decimal_regex = re.compile(r'Decimal\((\d+), (\d+)\)')
 
@@ -29,10 +31,6 @@ class ClickHouseColumn(Column):
         inner_dtype = self.match_brackets(dtype)
         if inner_dtype:
             dtype = inner_dtype
-            if not self.is_nullable:
-                # Support LowCardinality(Nullable(dtype))
-                inner_dtype = self.match_brackets(dtype)
-                dtype = inner_dtype if inner_dtype else dtype
 
         if dtype.lower().startswith('fixedstring'):
             match_sized = self._fix_size_regex.search(dtype)
@@ -123,5 +121,6 @@ class ClickHouseColumn(Column):
     def match_brackets(self, dtype):
         match = self._brackets_regex.search(dtype.strip())
         if match:
-            self.is_nullable = match.group(1) == 'Nullable'
-            return match.group(2)
+            self.is_low_cardinality = (match.group(1) or match.group(2)) == "LowCardinality"
+            self.is_nullable = match.group(2) == 'Nullable'
+            return match.group(3)
