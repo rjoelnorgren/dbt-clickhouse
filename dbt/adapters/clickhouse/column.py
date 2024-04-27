@@ -54,18 +54,15 @@ class ClickHouseColumn(Column):
     def data_type(self) -> str:
         if self.is_string():
             data_t = self.string_type(self.string_size())
-            if self.is_nullable:
-                return "Nullable({})".format(data_t)
-            return data_t
         elif self.is_numeric():
             data_t = self.numeric_type(self.dtype, self.numeric_precision, self.numeric_scale)
-            if self.is_nullable:
-                return "Nullable({})".format(data_t)
-            return data_t
         else:
-            if self.is_nullable:
-                return "Nullable({})".format(self.dtype)
-            return self.dtype
+            data_t = self.dtype
+
+        if self.is_nullable or self.is_low_cardinality:
+            data_t = self.nested_type(data_t, self.is_low_cardinality, self.is_nullable)
+
+        return data_t
 
     def is_string(self) -> bool:
         return self.dtype.lower() in [
@@ -108,6 +105,15 @@ class ClickHouseColumn(Column):
     @classmethod
     def numeric_type(cls, dtype: str, precision: Any, scale: Any) -> str:
         return f'Decimal({precision}, {scale})'
+
+    @classmethod
+    def nested_type(cls, dtype: str, is_low_cardinality: bool, is_nullable: bool) -> str:
+        template = "{}"
+        if is_low_cardinality:
+            template = template.format("LowCardinality({})")
+        if is_nullable:
+            template = template.format("Nullable({})")
+        return template.format(dtype)
 
     def literal(self, value):
         return f'to{self.dtype}({value})'
